@@ -1,6 +1,7 @@
 """Parity matcher unit tests + the real cross-backend parity run (needs `make models`)."""
 
 import importlib.util
+import os
 
 import numpy as np
 import pytest
@@ -62,15 +63,29 @@ def test_both_empty_passes():
 CANDIDATES = [b for b, mod in (("onnxrt", "onnxruntime"), ("openvino", "openvino")) if importlib.util.find_spec(mod)]
 
 
+EXPECTED_MODELS = {"yolov5n", "yolov8n", "yolo11n"}
+
+
+def _skip_or_fail(msg: str):
+    # locally a missing prerequisite is a skip; in CI (YOLOKIT_REQUIRE_MODELS=1) it must not pass silently
+    if os.environ.get("YOLOKIT_REQUIRE_MODELS") == "1":
+        pytest.fail(msg)
+    pytest.skip(msg)
+
+
 @pytest.mark.models
 def test_backend_parity(models_dir, fixtures_dir):
     if importlib.util.find_spec("torch") is None:
-        pytest.skip("torch reference backend not installed (pip install -e .[ref])")
+        _skip_or_fail("torch reference backend not installed (pip install -e .[ref])")
     models = sorted(p for p in models_dir.glob("*.onnx") if p.with_suffix(".pt").exists())
     if not models:
-        pytest.skip("no models; run `make models`")
+        _skip_or_fail("no models; run tools/fetch_models.py")
+    if os.environ.get("YOLOKIT_REQUIRE_MODELS") == "1":
+        missing = EXPECTED_MODELS - {p.stem for p in models}
+        assert not missing, f"models missing: {sorted(missing)}"
+        assert set(CANDIDATES) == {"onnxrt", "openvino"}, f"backends missing, have {CANDIDATES}"
     if not list_images(fixtures_dir):
-        pytest.skip("no fixture images in tests/fixtures")
+        _skip_or_fail("no fixture images in tests/fixtures")
     rows = run_parity(models, CANDIDATES, fixtures_dir)
     print("\n" + to_markdown(rows))
     failed = [f"{r.model}/{r.backend}: {r.failed_images}" for r in rows if not r.passed]
