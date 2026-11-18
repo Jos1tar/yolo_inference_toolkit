@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yolokit"
+version = "0.1.0.dev0"
+description = "Multi-backend inference toolkit for YOLO-family detectors, with cross-backend parity tests"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+# runtime: no ultralytics, no yolov5 code (see tools/ for export)
+dependencies = [
+    "numpy>=1.26,<3",
+    "opencv-python-headless>=4.9,<5",
+    "onnx>=1.16,<2",
+    "typer>=0.12,<1",
+]
+
+[project.optional-dependencies]
+ort = ["onnxruntime>=1.18,<2"]
+openvino = ["openvino>=2024.4"]
+cpu = ["yolokit[ort,openvino]"]
+# dev-only reference backend + model export. ultralytics is AGPL-3.0:
+# it is never imported by the runtime, only by tools/ and backends/torch_ref.py
+ref = [
+    "torch>=2.3",
+    "torchvision>=0.18",
+    "ultralytics>=8.3",
+    "pandas", "requests", "seaborn", "gitpython", "pillow", "psutil", "pyyaml", "tqdm", "scipy",  # yolov5 hub deps
+    "onnxslim",
+]
+dev = ["pytest>=8", "ruff>=0.6", "pre-commit>=3"]
+
+[project.scripts]
+yk = "yolokit.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["yolokit*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = ["legacy", "models"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]  # typer defaults

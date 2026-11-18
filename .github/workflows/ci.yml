@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[cpu,dev]"
+      - run: ruff check .
+      - run: pytest -m "not models"
+
+  parity:
+    runs-on: ubuntu-latest
+    needs: unit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: install (CPU torch)
+        run: |
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[cpu,ref,dev]"
+      - uses: actions/cache@v4
+        with:
+          path: models
+          key: models-${{ hashFiles('tools/fetch_models.py') }}
+      - run: make models
+      - name: parity (torch reference vs onnxrt / openvino)
+        run: |
+          pytest -m models -s
+          if ls tests/fixtures/*.jpg tests/fixtures/*.png >/dev/null 2>&1; then
+            yk parity models/*.onnx --backends onnxrt,openvino --markdown >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "no fixture images yet; parity table skipped" >> "$GITHUB_STEP_SUMMARY"
+          fi
